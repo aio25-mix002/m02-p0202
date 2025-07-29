@@ -1,51 +1,196 @@
+import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+import torch
+import faiss
+import json
+from datetime import datetime
+from tqdm import tqdm
 from sklearn.model_selection import train_test_split
-from sklearn.naive_bayes import GaussianNB
+from sklearn.preprocessing import LabelEncoder
+from utils import get_embedding_model, get_embeddings, average_pool
 
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+MODEL_NAME = "intfloat/multilingual-e5-base"
 
-# Train-test split
-VAL_SIZE = 0.2
-TEST_SIZE = 0.125
-SEED = 0
-X_train, X_val, y_train, y_val = train_test_split(X,y,test_size = VAL_SIZE, shuffle = True, random_state=SEED)
-X_train, X_test, y_train, y_test = train_test_split(X_train, y_train, test_size = TEST_SIZE, shuffle = True, random_state= SEED)
+# Training pipeline
+def training(messages, labels, model_name=MODEL_NAME, val_size=0.2, test_size=0.125, seed=42, k=1, device=DEVICE):
+    '''
+    Training pipeline that includes these steps:
+    1. Getting embedded features and encoded label.
+    2. Splitting train, validation, test sets.
+    3. Training a classification model (KNN by default).
+    4. Saving a checkpoint if applicable.
+    5. Evaluating the model on test set.
+    '''
+    # Getting tokenizer and vectorizer
+    tokenizer, embed_model = get_embedding_model(model_name=model_name)
+    
+    # Getting processed features and label. 
+    le = LabelEncoder()
+    y = le.fit_transform(labels)
+    X_embeddings = get_embeddings(messages, model=embed_model, tokenizer=tokenizer, device=device)
+    metadata = [{"index": i,"message": message, "label": label, "label_encoded":y[i]} 
+                for i,(message, label) in enumerate(zip(messages,labels))]
 
-# Training
-model = GaussianNB()
-print("Start training...")
-model = model.fit(X_train,y_train)
-print("Training completed!")
+    # Train-val-test split
+    train_indices, val_indices = train_test_split(range(len(messages)),test_size = val_size, stratify = y, random_state = seed)
+    train_indices, test_indices = train_test_split(train_indices, test_size = test_size, stratify = y, random_state = seed)
+    X_train_emb = X_embeddings[train_indices]
+    X_test_emb = X_embeddings[test_indices]
+    X_val_emb = X_embeddings[val_indices]
+    y_train = y[train_indices]
+    y_test = y[test_indices]
+    y_val = y[val_indices]
+    train_metadata = [metadata[i] for i in train_indices]
+    test_metadata = [metadata[i] for i in test_indices]
+    val_metadata = [metadata[i] for i in val_indices]
+    
+    embedding_dim = X_train_emb.shape[1]
+    index = faiss.IndexFlatIP(embedding_dim)
+    index.add(X_train_emb.astype("float32"))
+    
+    # Training
+    k_values = [1, 3, 5]
+    print("Hyperparameter tuning on validation set...")
+    accuracy_results, error_results = hyperparameter_tuning(X_val_emb,y_val,val_metadata, index, train_metadata, k_values)
+    print("\n" + "="*50)
+    print("ACCURACY RESULTS")
+    print("="*50)
+    for k, accuracy in accuracy_results.items():
+        print(f"Top-{k} accuracy: {accuracy:.4f} ({accuracy*100:.2f}%)")
+    print("="*50)
 
-y_val_pred = model.predict(X_val)
-y_test_pred = model.predict(X_test)
-val_accuracy = accuracy_score(y_val, y_val_pred)
-test_accuracy = accuracy_score(y_test, y_test_pred)
-val_f1_scores = f1_score(y_val, y_val_pred)
-test_f1_scores = f1_score(y_test, y_test_pred)
-val_cm = confusion_matrix(y_val, y_val_pred)
-test_cm = confusion_matrix(y_test, y_test_pred)
+    error_analysis = {
+        "timestamp" : datetime.now().isoformat(),
+        "model" : model_name,
+        "val_size": len(X_val_emb),
+        "accuracy_results": accuracy_results,
+        "errors_by_k" : {}
+    }
+    for k, errors in error_results.items():
+        error_analysis["errors_by_k"][f"k_{k}"] = {
+            "total_errors": len(errors),
+            "error_rate" : len(errors) / len(X_val_emb),
+            "errors" : errors
+        }
+    output_file = "error_analysis.json"
+    with open(output_file,"w", encoding="utf-8") as f:
+        json.dump(error_analysis, f, ensure_ascii=False, indent=2)
+    print(f"\n***Error analysis saved to: {output_file}***")
+    print()
+    print(f"***Summary:")
+    for k, errors in error_results.items():
+        print(f"k = {k}: {len(errors)} errors out of {len(X_val_emb)} samples")
+       
+    # Evaluation
+    pass
 
-# Visualization
-fig, axes = plt.subplots(1, 2, figsize=(12, 6), sharey=True)
-fig.suptitle('Naive Bayes')
+ 
+def hyperparameter_tuning(val_embeddings, val_metadata, index, train_metadata, k_values):
+    '''
+    Tuning hyperparameters such as k. 
+    Logging and visualizing accuracies if possible.
+    Getting the hypeparameters that give the most accurate model.
+    '''
+    results = {}
+    all_errors = {}
+    for k in k_values:
+        correct = 0
+        total = len(val_embeddings)
+        errors = []
+        for i in tqdm(range(total),desc=f"Evaluating k={k}"):
+            query_embedding = val_embeddings[i:i+1].astype("float32")
+            true_label = val_metadata[i]["label"]
+            true_message = val_metadata[i]["message"]
+            scores, indices = index.search(query_embedding,k)
+            predictions = []
+            neighbor_details = []
+            for j in range(k):
+                neighbor_idx = indices[0][j]
+                neighbor_label = train_metadata[neighbor_idx]["label"]
+                neighbor_message = train_metadata[neighbor_idx]["message"]
+                neighbor_score = float(scores[0][j])
+                predictions.append(neighbor_label)
+                neighbor_details.append({
+                    "label": neighbor_label,
+                    "message": neighbor_message,
+                    "score":neighbor_score
+                })
+        unique_labels, counts = np.unique(predictions, return_counts=True)
+        predicted_label = unique_labels[np.argmax(counts)]
 
-sns.heatmap(val_cm,ax=axes[0], annot = True,linewidths=1, fmt='d', cmap='Blues')
-val_title = f'Val Accuracy Score: {val_accuracy:.3f}, F1 Score: {val_f1_scores:.3f}'
-axes[0].set_title(val_title)
+        if predicted_label == true_label:
+            correct += 1
+        else:
+            error_info = {
+                "index" : i,
+                "original_index" : val_metadata[i]["index"],
+                "message" : true_message,
+                "true_label" : true_label,
+                "predicted_label" : predicted_label,
+                "neighbors" : neighbor_details,
+                "label_distribution" : {label: int(count) for label, count in zip(unique_labels,counts)}
+            }
+            errors.append(error_info)
+        accuracy = correct / total
+        error_count = total - correct
+        results[k] = accuracy
+        all_errors[k] = errors
+        print(f"Accuracy with k = {k}: {accuracy:.4f}")
+        print(f"Number of errors with k = {k}: {error_count}/{total} ({(error_count/total)*100:.2f}%)")
+    return results, all_errors
+    
+def classify_with_knn(query_text,model,tokenizer,device,index,train_metadata,k=1):
+    query_with_prefix = f"query: {query_text}"
+    batch_dict = tokenizer([query_with_prefix],max_length=512,padding=True,truncation=True)
+    batch_dict = {k:torch.tensor(v).to(device) for k,v in batch_dict.items()}
+    with torch.no_grad():
+        outputs = model(**batch_dict)
+        query_embedding= average_pool(outputs.last_hidden_state, batch_dict["attention_mask"])
+        query_embedding = F.normalize(query_embedding,p=2,dim=1)
+        query_embedding = query_embedding.cpu().numpy().astype("float32")
+    scores, indices = index.search(query_embedding,k)
+    predictions= []
+    neighbor_info = []
+    for i in range(k):
+        neighbor_idx = indices[0][i]
+        neighbor_score = scores[0][i]
+        neighbor_label = train_metadata[neighbor_idx]['label']
+        neighbor_message = train_metadata[neighbor_idx]['message']
+        predictions.append(neighbor_label)
+        neighbor_info.append({
+            "score": float(neighbor_score),
+            "label": neighbor_label,
+            "message":neighbor_message[:100] + "..." if len(neighbor_message) > 100 else neighbor_message
+        })
+    unique_labels, counts = np.unique(predictions, return_counts = True)
+    final_prediction = unique_labels[np.argmax(counts)]
+    return final_prediction, neighbor_info         
+        
+def spam_classifier_pipeline(user_input, model, tokenizer, index, train_metadata, device=DEVICE, k=3):
+    print()
+    print(f"***Classifying: '{user_input}'")
+    print()
+    print(f"***Using top-{k} nearest neighbors")
+    print()
 
-sns.heatmap(test_cm,ax=axes[1], annot = True,linewidths=1, fmt='d', cmap='Greens')
-test_title = f'Test Accuracy Score: {test_accuracy:.3f}, F1 Score: {test_f1_scores:.3f}'
-axes[1].set_title(test_title)
+    prediction,neighbors = classify_with_knn(user_input, model, tokenizer, device, index, train_metadata, k=k)
+    print(f"*** Prediction: {prediction.upper()}")
+    print()
 
-plt.show()
+    print("***Top neighbors:")
+    for i, neighbor in enumerate(neighbors,1):
+        print(f"{i}. Label {neighbor["label"]} | Score: {neighbor['score']:.4f}")
+        print(f"Message: {neighbor["message"]}")
+        print()
+    labels = [n["label"] for n in neighbors]
+    label_counts = {label: labels.count(label) for label in set(labels)}
+    return {
+        "prediction": prediction,
+        "neighbors" : neighbors,
+        "label_distribution": label_counts
+    }
 
-# Predict and evaluation
-def predict(text, model, dictionary, label_encoder):
-    processed_text = preprocess_text(text)
-    features = create_features(processed_text, dictionary)
-    features= np.array(features).reshape(1,-1)
-    prediction = model.predict(features)
-    prediction_cls = label_encoder.inverse_transform(prediction)[0]
-    return prediction_cls
-
+if __name__ == '__main__':
+   training()
