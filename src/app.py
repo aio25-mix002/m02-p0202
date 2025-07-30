@@ -71,7 +71,7 @@ st.markdown("""
 
 @st.cache_data
 def load_spam_data():
-    df= pd.read_csv('spam.csv')
+    df= pd.read_csv('../data/spam.csv')
     df= df.drop_duplicates()
     df = df.dropna()
     return df
