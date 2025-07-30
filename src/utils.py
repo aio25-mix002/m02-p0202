@@ -1,3 +1,4 @@
+import re
 import string
 import numpy as np
 import torch
@@ -6,6 +7,25 @@ import nltk
 from nltk.tokenize import word_tokenize
 from nltk.stem import PorterStemmer,WordNetLemmatizer
 from nltk.corpus import stopwords,wordnet
+from datetime import datetime, timedelta
+from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
+from nltk.stem.porter import PorterStemmer
+from wordcloud import WordCloud,STOPWORDS
+from nltk.stem import WordNetLemmatizer
+from nltk.tokenize import word_tokenize
+from nltk import pos_tag
+from sklearn import metrics
+from sklearn.model_selection import train_test_split
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.svm import SVC
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from xgboost import XGBClassifier
+from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, classification_report
+from sklearn.preprocessing import StandardScaler, LabelEncoder
+from nltk.corpus import stopwords, wordnet
+from imblearn.over_sampling import SMOTE, ADASYN
+import pandas as pd
 
 from tqdm import tqdm
 from transformers import AutoTokenizer, AutoModel
@@ -96,6 +116,72 @@ def create_dictionary(messages):
         if token in dictionary:
             features[dictionary.index(token)] += 1
     return features
+
+def process_dataframe(path):
+    df= pd.read_csv(path)
+    df= df.drop_duplicates()
+    df = df.dropna()
+    return df
+
+def get_simple_pos(tag):
+    if tag.startswith('J'):
+        return wordnet.ADJ
+    elif tag.startswith('V'):
+        return wordnet.VERB
+    elif tag.startswith('N'):
+        return wordnet.NOUN
+    elif tag.startswith('R'):
+        return wordnet.ADV
+    else:
+        return wordnet.NOUN
+    
+def lemmatize_words(text):
+    lemmatizer = WordNetLemmatizer()
+    stop_words = stopwords.words('english')
+    final_text = []
+    for word in text.split():
+        if word not in stop_words and len(word) > 2:
+            pos = pos_tag([word])
+            lema = lemmatizer.lemmatize(word,get_simple_pos(pos[0][1]))
+            final_text.append(lema)
+    return " ".join(final_text)
+
+def preprocess_text(text):
+    text = text.lower()
+    text = re.sub(r"[^\w\s]", '', text)
+    lema = lemmatize_words(text)
+    return lema
+
+    
+def create_model(name):
+    if name == 'Logistic Regression':
+        model = LogisticRegression()
+    elif name == 'Support Vector Machine':
+        model = SVC(kernel='linear', C=1, probability=True)
+    else:
+        model = RandomForestClassifier(n_estimators=400, random_state=11)
+
+    return model
+
+def create_vector(name):
+    if name == 'TFIDF':
+        return TfidfVectorizer(max_df=0.9, min_df=2)
+    else:
+        return CountVectorizer(max_df=0.9, min_df=2)
+
+def create_train_test_data(X,Y,augment):
+    xtrain, xtest, ytrain, ytest = train_test_split(X,Y,random_state=42, test_size = 0.3, stratify = Y)
+    if augment == 'SMOTE':
+        sm = SMOTE(random_state = 42)
+        xtrain, ytrain = sm.fit_resample(xtrain, ytrain)
+    elif augment == 'ADASYN':
+        ada = ADASYN(random_state = 42)
+        xtrain, ytrain = ada.fit_resample(xtrain, ytrain)
+    return xtrain, xtest, ytrain, ytest
+
+def train_model(model_name,features_vector,labels_vector):
+    model = create_model(model_name)
+    return model.fit(features_vector,labels_vector)
 
 # def create_features(tokens, dictionary):
     
