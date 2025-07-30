@@ -26,6 +26,7 @@ from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, classifi
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from nltk.corpus import stopwords, wordnet
 from imblearn.over_sampling import SMOTE, ADASYN
+from deep_translator import GoogleTranslator
 import streamlit as st
 
 st.set_page_config(
@@ -247,11 +248,13 @@ with tabs[3]:
 with tabs[4]:
     st.header("🎯 Predict")
     message_input = st.text_input("Message", "")
-    message_pred = [preprocess_text(message_input)]
+    translated = GoogleTranslator(source='auto', target='en').translate(message_input)
+    message_pred = [preprocess_text(translated)]
     vector_name = st.selectbox("Vectorize",vectors,key="10")
     aug_name = st.selectbox("Augmentation",augments,key="11")
     model_name = st.selectbox("Model Name",models,key="12")
     if st.button("🚀 Train Model",key=13):
+        st.markdown(f'<h3 style="color:blue;">Message: {translated}</h3>', unsafe_allow_html=True)
         vectorize = create_vector(vector_name)
         features = vectorize.fit_transform(messages)
         xtrain, xtest, ytrain, ytest= create_train_test_data(features,y,aug_name)
