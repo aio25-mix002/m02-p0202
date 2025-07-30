@@ -97,6 +97,6 @@ def create_dictionary(messages):
             features[dictionary.index(token)] += 1
     return features
 
-def create_features(tokens, dictionary):
+# def create_features(tokens, dictionary):
     
 # X = np.array([create_features(tokens,dictionary) for tokens in messages])
