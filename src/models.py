@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 import torch
+import torch.nn.functional as F
 import faiss
 import json
 from datetime import datetime
@@ -181,8 +182,8 @@ def spam_classifier_pipeline(user_input, model, tokenizer, index, train_metadata
 
     print("***Top neighbors:")
     for i, neighbor in enumerate(neighbors,1):
-        print(f"{i}. Label {neighbor["label"]} | Score: {neighbor['score']:.4f}")
-        print(f"Message: {neighbor["message"]}")
+        print(f"{i}. Label {neighbor['label']} | Score: {neighbor['score']:.4f}")
+        print(f"Message: {neighbor['message']}")
         print()
     labels = [n["label"] for n in neighbors]
     label_counts = {label: labels.count(label) for label in set(labels)}
@@ -193,4 +194,5 @@ def spam_classifier_pipeline(user_input, model, tokenizer, index, train_metadata
     }
 
 if __name__ == '__main__':
-   training()
+    # training(messages, labels)
+    pass
