@@ -1,6 +1,9 @@
+# If you would like to run this file (models.py), specifically use the model "intfloat/multilingual-e5-base", please run this code from terminal: "huggingface-cli login"
+
 import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
+import pandas as pd
+# import matplotlib.pyplot as plt
+# import seaborn as sns
 import torch
 import torch.nn.functional as F
 import faiss
@@ -35,8 +38,14 @@ def training(messages, labels, model_name=MODEL_NAME, val_size=0.2, test_size=0.
                 for i,(message, label) in enumerate(zip(messages,labels))]
 
     # Train-val-test split
-    train_indices, val_indices = train_test_split(range(len(messages)),test_size = val_size, stratify = y, random_state = seed)
-    train_indices, test_indices = train_test_split(train_indices, test_size = test_size, stratify = y, random_state = seed)
+    train_indices, val_indices = train_test_split(range(len(messages)), 
+                                                  test_size = val_size, 
+                                                  stratify = y, 
+                                                  random_state = seed)
+    train_indices, test_indices = train_test_split(train_indices, 
+                                                   test_size = test_size, 
+                                                   stratify = [y[i] for i in train_indices], #y
+                                                   random_state = seed)
     X_train_emb = X_embeddings[train_indices]
     X_test_emb = X_embeddings[test_indices]
     X_val_emb = X_embeddings[val_indices]
@@ -54,7 +63,7 @@ def training(messages, labels, model_name=MODEL_NAME, val_size=0.2, test_size=0.
     # Training
     k_values = [1, 3, 5]
     print("Hyperparameter tuning on validation set...")
-    accuracy_results, error_results = hyperparameter_tuning(X_val_emb,y_val,val_metadata, index, train_metadata, k_values)
+    accuracy_results, error_results, final_k = hyperparameter_tuning(X_val_emb,val_metadata, index, train_metadata, k_values)
     print("\n" + "="*50)
     print("ACCURACY RESULTS")
     print("="*50)
@@ -85,7 +94,38 @@ def training(messages, labels, model_name=MODEL_NAME, val_size=0.2, test_size=0.
         print(f"k = {k}: {len(errors)} errors out of {len(X_val_emb)} samples")
        
     # Evaluation
-    pass
+    k_values = [final_k]
+    print("\n#####")
+    print("Evaluation on test set...")
+    accuracy_results, error_results, _ = hyperparameter_tuning(X_test_emb, test_metadata, index, train_metadata, k_values)
+    print("\n" + "="*50)
+    print("ACCURACY RESULTS")
+    print("="*50)
+    for k, accuracy in accuracy_results.items():
+        print(f"Top-{k} accuracy: {accuracy:.4f} ({accuracy*100:.2f}%)")
+    print("="*50)
+
+    error_analysis = {
+        "timestamp" : datetime.now().isoformat(),
+        "model" : model_name,
+        "val_size": len(X_val_emb),
+        "accuracy_results": accuracy_results,
+        "errors_by_k" : {}
+    }
+    for k, errors in error_results.items():
+        error_analysis["errors_by_k"][f"k_{k}"] = {
+            "total_errors": len(errors),
+            "error_rate" : len(errors) / len(X_val_emb),
+            "errors" : errors
+        }
+    output_file = "error_analysis.json"
+    with open(output_file,"w", encoding="utf-8") as f:
+        json.dump(error_analysis, f, ensure_ascii=False, indent=2)
+    print(f"\n***Error analysis saved to: {output_file}***")
+    print()
+    print(f"***Summary:")
+    for k, errors in error_results.items():
+        print(f"k = {k}: {len(errors)} errors out of {len(X_val_emb)} samples")
 
  
 def hyperparameter_tuning(val_embeddings, val_metadata, index, train_metadata, k_values):
@@ -96,7 +136,8 @@ def hyperparameter_tuning(val_embeddings, val_metadata, index, train_metadata, k
     '''
     results = {}
     all_errors = {}
-    for k in k_values:
+    final_k = k_values[0]
+    for idx, k in enumerate(k_values):
         correct = 0
         total = len(val_embeddings)
         errors = []
@@ -140,7 +181,10 @@ def hyperparameter_tuning(val_embeddings, val_metadata, index, train_metadata, k
         all_errors[k] = errors
         print(f"Accuracy with k = {k}: {accuracy:.4f}")
         print(f"Number of errors with k = {k}: {error_count}/{total} ({(error_count/total)*100:.2f}%)")
-    return results, all_errors
+        if accuracy > results[final_k]:
+            final_k = k
+    # print('results of hyper tune', results)
+    return results, all_errors, final_k
     
 def classify_with_knn(query_text,model,tokenizer,device,index,train_metadata,k=1):
     query_with_prefix = f"query: {query_text}"
@@ -195,4 +239,8 @@ def spam_classifier_pipeline(user_input, model, tokenizer, index, train_metadata
 
 if __name__ == '__main__':
     # training(messages, labels)
-    pass
+    DATASET_PATH = '../data/spam.csv'
+    df = pd.read_csv(DATASET_PATH) ##[:500]
+    messages = df['Message'].values.tolist()
+    labels = df['Category'].values.tolist()
+    training(messages, labels) 
