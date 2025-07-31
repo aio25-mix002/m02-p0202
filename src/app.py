@@ -30,6 +30,7 @@ from deep_translator import GoogleTranslator
 import streamlit as st
 from models import spam_classifier_pipeline
 from utils import *
+from models import *
 
 nltk.download('stopwords')
 nltk.download('averaged_perceptron_tagger_eng')
@@ -68,22 +69,42 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+@st.cache_resource
+def create_model_faiss():
+    MODEL_NAME = "intfloat/multilingual-e5-base"
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+    model = AutoModel.from_pretrained(MODEL_NAME)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = model.to(device)
+    model.eval()
+    return model,device,tokenizer
+model,device,tokenizer = create_model_faiss()
+
 @st.cache_data
 def create_feature_label(path):
     df = process_dataframe(path)
-    messages = df['Message'].values.tolist()
+    messages_faiss = df['Message'].values.tolist()
     labels = df['Category'].values.tolist()
-    messages = [preprocess_text(message) for message in messages]
+    messages = [preprocess_text(message) for message in messages_faiss]
     le = LabelEncoder()
     y = le.fit_transform(labels)
-    return df ,messages, y, le
+    return df, messages_faiss, messages, labels, y, le
+df, messages_faiss,messages, labels,y, le = create_feature_label('../data/spam.csv')
 
-df,messages,y, le = create_feature_label('../data/spam.csv')
+
+def create_embedding_metadata(messages,model,tokenizer,device):
+    X_embeddings = get_embeddings(messages, model, tokenizer, device)
+    metadata = [{"index":i,"message":message, "label": label, "label_encoded":y[i]} 
+                    for i,(message, label) in enumerate(zip(messages,labels))]
+    return X_embeddings,metadata
+X_embeddings, metadata = create_embedding_metadata(messages_faiss,model,tokenizer,device)
+
+
 
 
 # UI 
 def main():    
-    tabs = st.tabs(["📋 Data Overview", "Compare Model", "Compare Augmentation", "Compare BAGs - TFIDF", "Predict"])
+    tabs = st.tabs(["📋 Data Overview", "Compare Model", "Compare Augmentation", "Compare BAGs - TFIDF", "Predict", "FAISS"])
     models = ['Logistic Regression', 'Support Vector Machine', 'Random Forest']
     augments = ['No Augmentation','SMOTE','ADASYN']
     vectors = ['Bag of Words','TFIDF']
@@ -205,6 +226,27 @@ def main():
             messages_vector = vectorize.transform(message_pred)
             pred = model_train.predict(messages_vector)
             st.markdown(f'<h3 style="color:green;">Class Predicted: {le.inverse_transform(pred)[0]}</h3>', unsafe_allow_html=True)
+    
+    with tabs[5]:
+        st.header("🎯 FAISS")
+        index,train_metadata,test_metadata,X_test_emb,y_test = create_train_test_metadata(messages_faiss, y, X_embeddings,metadata,test_size= 0.1,seed = 42)
+        k_values=[1,3,5]
+        predict_results = evaluate_knn_accuracy(X_test_emb,test_metadata,index, train_metadata, k_values)
+        cols_tab5 = st.columns(len(k_values))
+        for index, k in enumerate(k_values):
+            with cols_tab5[index]:
+                st.subheader(f"K Nearest Neighbors: {k}")
+                accuracy = accuracy_score(y_test, predict_results[k])
+                f1_scores = f1_score(y_test,predict_results[k])
+                cm = confusion_matrix(y_test,predict_results[k])
+                fig = plt.figure(figsize=(4,4))
+                sns.heatmap(cm, linewidths=1, fmt='d', cmap='Greens', annot=True)
+                plt.ylabel('Actual label')
+                plt.xlabel('Predicted label')
+                title = f'Accuracy Score: {accuracy:.3f}, F1 Score: {f1_scores:.3f}'
+                plt.title(title)
+                st.pyplot(fig)
+
 
 if __name__ == "__main__":
     main()
