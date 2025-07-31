@@ -29,7 +29,6 @@ from imblearn.over_sampling import SMOTE, ADASYN
 from deep_translator import GoogleTranslator
 import streamlit as st
 from models import spam_classifier_pipeline
-from utils import *
 
 nltk.download('stopwords')
 nltk.download('averaged_perceptron_tagger_eng')
@@ -41,7 +40,9 @@ st.set_page_config(
     layout="wide"
 )
 
-
+stop = set(stopwords.words('english'))
+punctuation = list(string.punctuation)
+stop.update(punctuation)
 
 st.markdown("""
     <style>
@@ -69,17 +70,80 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 @st.cache_data
-def create_feature_label(path):
-    df = process_dataframe(path)
-    messages = df['Message'].values.tolist()
-    labels = df['Category'].values.tolist()
-    messages = [preprocess_text(message) for message in messages]
-    le = LabelEncoder()
-    y = le.fit_transform(labels)
-    return df ,messages, y, le
+def load_spam_data():
+    df= pd.read_csv('../data/spam.csv')
+    df= df.drop_duplicates()
+    df = df.dropna()
+    return df
 
-df,messages,y, le = create_feature_label('../data/spam.csv')
+def punctuation_removal(text):
+    #translator = {k: '' for k in list(string.punctuation)}
+    translator = str.maketrans('','',string.punctuation)
+    return text.translate(translator)
+def get_simple_pos(tag):
+    if tag.startswith('J'):
+        return wordnet.ADJ
+    elif tag.startswith('V'):
+        return wordnet.VERB
+    elif tag.startswith('N'):
+        return wordnet.NOUN
+    elif tag.startswith('R'):
+        return wordnet.ADV
+    else:
+        return wordnet.NOUN
+def lemmatize_words(text):
+    lemmatizer = WordNetLemmatizer()
+    stop_words = stopwords.words('english')
+    final_text = []
+    for word in text.split():
+        if word not in stop_words and len(word) > 2:
+            pos = pos_tag([word])
+            lema = lemmatizer.lemmatize(word,get_simple_pos(pos[0][1]))
+            final_text.append(lema)
+    return " ".join(final_text)
+    
+def preprocess_text(text):
+    text = text.lower()
+    text = re.sub(r"[^\w\s]", '', text)
+    lema = lemmatize_words(text)
+    return lema
 
+df = load_spam_data()
+messages = df['Message'].values.tolist()
+labels = df['Category'].values.tolist()
+messages = [preprocess_text(message) for message in messages]
+le = LabelEncoder()
+y = le.fit_transform(labels)
+
+def create_model(name):
+    if name == 'Logistic Regression':
+        model = LogisticRegression()
+    elif name == 'Support Vector Machine':
+        model = SVC(kernel='linear', C=1, probability=True)
+    else:
+        model = RandomForestClassifier(n_estimators=400, random_state=11)
+
+    return model
+
+def create_vector(name):
+    if name == 'TFIDF':
+        return TfidfVectorizer(max_df=0.9, min_df=2)
+    else:
+        return CountVectorizer(max_df=0.9, min_df=2)
+
+def create_train_test_data(X,Y,augment):
+    xtrain, xtest, ytrain, ytest = train_test_split(X,Y,random_state=42, test_size = 0.3, stratify = Y)
+    if augment == 'SMOTE':
+        sm = SMOTE(random_state = 42)
+        xtrain, ytrain = sm.fit_resample(xtrain, ytrain)
+    elif augment == 'ADASYN':
+        ada = ADASYN(random_state = 42)
+        xtrain, ytrain = ada.fit_resample(xtrain, ytrain)
+    return xtrain, xtest, ytrain, ytest
+
+def train_model(model_name,features_vector,labels_vector):
+    model = create_model(model_name)
+    return model.fit(features_vector,labels_vector)
 
 # UI 
 def main():    
@@ -119,9 +183,9 @@ def main():
         aug_name = st.selectbox("Data Augmentation",augments,key="1")
         vector_name = st.selectbox("Vectorize",vectors,key="2")
         if st.button("🚀 Train Model",key=3):
-            cols_tab1 = st.columns(len(models))
+            cols = st.columns(len(models))
             for index, model_name in enumerate(models):
-                with cols_tab1[index]:
+                with cols[index]:
                     vectorize = create_vector(vector_name)
                     features = vectorize.fit_transform(messages)
                     xtrain, xtest, ytrain, ytest= create_train_test_data(features,y,aug_name)
@@ -143,9 +207,9 @@ def main():
         model_name = st.selectbox("Model Name",models,key="4")
         vector_name = st.selectbox("Vectorize",vectors,key="5")
         if st.button("🚀 Train Model",key=6):
-            cols_tab2 = st.columns(len(augments))
+            cols = st.columns(len(augments))
             for index, aug_name in enumerate(augments):
-                with cols_tab2[index]:
+                with cols[index]:
                     vectorize = create_vector(vector_name)
                     features = vectorize.fit_transform(messages)
                     xtrain, xtest, ytrain, ytest= create_train_test_data(features,y,aug_name)         
@@ -168,9 +232,9 @@ def main():
         model_name = st.selectbox("Model Name",models,key="7")
         aug_name = st.selectbox("Augmentation",augments,key="8")
         if st.button("🚀 Train Model",key=9):
-            cols_tab3 = st.columns(len(vectors))
+            cols = st.columns(len(vectors))
             for index, vector_name in enumerate(vectors):
-                with cols_tab3[index]:
+                with cols[index]:
                     vectorize = create_vector(vector_name)
                     features = vectorize.fit_transform(messages)
                     xtrain, xtest, ytrain, ytest= create_train_test_data(features,y,aug_name)
