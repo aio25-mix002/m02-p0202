@@ -2,8 +2,8 @@
 
 import numpy as np
 import pandas as pd
-# import matplotlib.pyplot as plt
-# import seaborn as sns
+import matplotlib.pyplot as plt
+import seaborn as sns
 import torch
 import torch.nn.functional as F
 import faiss
@@ -12,15 +12,19 @@ from datetime import datetime
 from tqdm import tqdm
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
-from utils import get_embedding_model, get_embeddings, average_pool
+from sklearn.svm import SVC
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, classification_report
+from utils import get_embedding_model, get_embeddings, average_pool, create_vector, create_train_test_data, create_feature_label
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 MODEL_NAME = "intfloat/multilingual-e5-base"
 
 # Training pipeline
-def training(messages, labels, model_name=MODEL_NAME, val_size=0.2, test_size=0.125, seed=42, k=1, device=DEVICE):
+def training(data_path, model_name=MODEL_NAME, val_size=0.2, test_size=0.125, seed=42, k=1, device=DEVICE):
     '''
-    Training pipeline that includes these steps:
+    Training pipeline for LLM Embedding that includes these steps:
     1. Getting embedded features and encoded label.
     2. Splitting train, validation, test sets.
     3. Training a classification model (KNN by default).
@@ -31,8 +35,9 @@ def training(messages, labels, model_name=MODEL_NAME, val_size=0.2, test_size=0.
     tokenizer, embed_model = get_embedding_model(model_name=model_name)
     
     # Getting processed features and label. 
-    le = LabelEncoder()
-    y = le.fit_transform(labels)
+    # le = LabelEncoder()
+    # y = le.fit_transform(labels)
+    _, messages, y, le, labels = create_feature_label(data_path)
     X_embeddings = get_embeddings(messages, model=embed_model, tokenizer=tokenizer, device=device)
     metadata = [{"index": i,"message": message, "label": label, "label_encoded":y[i]} 
                 for i,(message, label) in enumerate(zip(messages,labels))]
@@ -63,7 +68,7 @@ def training(messages, labels, model_name=MODEL_NAME, val_size=0.2, test_size=0.
     # Training
     k_values = [1, 3, 5]
     print("Hyperparameter tuning on validation set...")
-    accuracy_results, error_results, final_k = hyperparameter_tuning(X_val_emb,val_metadata, index, train_metadata, k_values)
+    accuracy_results, error_results, final_k, _ = hyperparameter_tuning(X_val_emb,val_metadata, index, train_metadata, k_values)
     print("\n" + "="*50)
     print("ACCURACY RESULTS")
     print("="*50)
@@ -84,7 +89,7 @@ def training(messages, labels, model_name=MODEL_NAME, val_size=0.2, test_size=0.
             "error_rate" : len(errors) / len(X_val_emb),
             "errors" : errors
         }
-    output_file = "error_analysis.json"
+    output_file = "log/error_analysis.json"
     with open(output_file,"w", encoding="utf-8") as f:
         json.dump(error_analysis, f, ensure_ascii=False, indent=2)
     print(f"\n***Error analysis saved to: {output_file}***")
@@ -97,7 +102,7 @@ def training(messages, labels, model_name=MODEL_NAME, val_size=0.2, test_size=0.
     k_values = [final_k]
     print("\n#####")
     print("Evaluation on test set...")
-    accuracy_results, error_results, _ = hyperparameter_tuning(X_test_emb, test_metadata, index, train_metadata, k_values)
+    accuracy_results, error_results, _, (true_lab, predict_lab) = hyperparameter_tuning(X_test_emb, test_metadata, index, train_metadata, k_values)
     print("\n" + "="*50)
     print("ACCURACY RESULTS")
     print("="*50)
@@ -118,7 +123,7 @@ def training(messages, labels, model_name=MODEL_NAME, val_size=0.2, test_size=0.
             "error_rate" : len(errors) / len(X_val_emb),
             "errors" : errors
         }
-    output_file = "error_analysis.json"
+    output_file = "log/test_error_analysis.json"
     with open(output_file,"w", encoding="utf-8") as f:
         json.dump(error_analysis, f, ensure_ascii=False, indent=2)
     print(f"\n***Error analysis saved to: {output_file}***")
@@ -126,6 +131,12 @@ def training(messages, labels, model_name=MODEL_NAME, val_size=0.2, test_size=0.
     print(f"***Summary:")
     for k, errors in error_results.items():
         print(f"k = {k}: {len(errors)} errors out of {len(X_val_emb)} samples")
+        
+    accuracy_scr = accuracy_score(le.fit_transform(true_lab), le.fit_transform(predict_lab))
+    f1_scores = f1_score(le.fit_transform(true_lab), le.fit_transform(predict_lab))
+    cm = confusion_matrix(le.fit_transform(true_lab), le.fit_transform(predict_lab))
+     
+    return accuracy_scr, f1_scores, cm 
 
  
 def hyperparameter_tuning(val_embeddings, val_metadata, index, train_metadata, k_values):
@@ -141,11 +152,14 @@ def hyperparameter_tuning(val_embeddings, val_metadata, index, train_metadata, k
         correct = 0
         total = len(val_embeddings)
         errors = []
+        true_labels = []
+        predicted_labels = []
         for i in tqdm(range(total),desc=f"Evaluating k={k}"):
             query_embedding = val_embeddings[i:i+1].astype("float32")
             true_label = val_metadata[i]["label"]
+            true_labels.append(true_label)
             true_message = val_metadata[i]["message"]
-            scores, indices = index.search(query_embedding,k)
+            scores, indices = index.search(query_embedding, k)
             predictions = []
             neighbor_details = []
             for j in range(k):
@@ -159,22 +173,27 @@ def hyperparameter_tuning(val_embeddings, val_metadata, index, train_metadata, k
                     "message": neighbor_message,
                     "score":neighbor_score
                 })
-        unique_labels, counts = np.unique(predictions, return_counts=True)
-        predicted_label = unique_labels[np.argmax(counts)]
+            unique_labels, counts = np.unique(predictions, return_counts=True)
+            # print('predictions', p,redictions)
+            # print('unique_labels, counts', unique_labels, counts)
+            predicted_label = unique_labels[np.argmax(counts)]
+            predicted_labels.append(predicted_label)
+            # print('175 hyper predicted_label', predicted_labels)
 
-        if predicted_label == true_label:
-            correct += 1
-        else:
-            error_info = {
-                "index" : i,
-                "original_index" : val_metadata[i]["index"],
-                "message" : true_message,
-                "true_label" : true_label,
-                "predicted_label" : predicted_label,
-                "neighbors" : neighbor_details,
-                "label_distribution" : {label: int(count) for label, count in zip(unique_labels,counts)}
-            }
-            errors.append(error_info)
+
+            if predicted_label == true_label:
+                correct += 1
+            else:
+                error_info = {
+                    "index" : i,
+                    "original_index" : val_metadata[i]["index"],
+                    "message" : true_message,
+                    "true_label" : true_label,
+                    "predicted_label" : predicted_label,
+                    "neighbors" : neighbor_details,
+                    "label_distribution" : {label: int(count) for label, count in zip(unique_labels,counts)}
+                }
+                errors.append(error_info)
         accuracy = correct / total
         error_count = total - correct
         results[k] = accuracy
@@ -184,7 +203,9 @@ def hyperparameter_tuning(val_embeddings, val_metadata, index, train_metadata, k
         if accuracy > results[final_k]:
             final_k = k
     # print('results of hyper tune', results)
-    return results, all_errors, final_k
+    # print(true_labels)
+    # print(predicted_labels)
+    return results, all_errors, final_k, (true_labels, predicted_labels)
     
 def classify_with_knn(query_text,model,tokenizer,device,index,train_metadata,k=1):
     query_with_prefix = f"query: {query_text}"
@@ -237,10 +258,31 @@ def spam_classifier_pipeline(user_input, model, tokenizer, index, train_metadata
         "label_distribution": label_counts
     }
 
+def create_model(name):
+    if name == 'Logistic Regression':
+        model = LogisticRegression()
+    elif name == 'Support Vector Machine':
+        model = SVC(kernel='linear', C=1, probability=True)
+    else:
+        model = RandomForestClassifier(n_estimators=400, random_state=11)
+
+    return model
+
+def train_model(input_tuple, vector_name, model_name, aug_name):
+    df,messages,y, le = input_tuple
+    vectorize = create_vector(vector_name)
+    features = vectorize.fit_transform(messages)
+    xtrain, xtest, ytrain, ytest = create_train_test_data(features, y, aug_name)
+    # model_train = train_model(model_name, xtrain, ytrain)
+    model_train = create_model(model_name)
+    model_train.fit(xtrain, ytrain)
+    pred = model_train.predict(xtest)
+    accuracy = accuracy_score(ytest, pred)
+    f1_scores = f1_score(ytest, pred)
+    cm = confusion_matrix(ytest, pred)
+    return accuracy, f1_scores, cm
+
 if __name__ == '__main__':
     # training(messages, labels)
-    DATASET_PATH = '../data/spam.csv'
-    df = pd.read_csv(DATASET_PATH) ##[:500]
-    messages = df['Message'].values.tolist()
-    labels = df['Category'].values.tolist()
-    training(messages, labels) 
+    DATASET_PATH = './data/spam.csv'
+    training(DATASET_PATH) 

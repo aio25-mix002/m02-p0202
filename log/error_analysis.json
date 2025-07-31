@@ -1,0 +1,84 @@
+{
+  "timestamp": "2025-07-31T19:34:18.111088",
+  "model": "intfloat/multilingual-e5-base",
+  "val_size": 20,
+  "accuracy_results": {
+    "1": 0.95,
+    "3": 1.0,
+    "5": 0.95
+  },
+  "errors_by_k": {
+    "k_1": {
+      "total_errors": 1,
+      "error_rate": 0.05,
+      "errors": [
+        {
+          "index": 19,
+          "original_index": 89,
+          "message": "ela kanoil download come wen free",
+          "true_label": "ham",
+          "predicted_label": "spam",
+          "neighbors": [
+            {
+              "label": "spam",
+              "message": "hear new divorce barbie come ken stuff",
+              "score": 0.8574647307395935
+            }
+          ],
+          "label_distribution": {
+            "spam": 1
+          }
+        }
+      ]
+    },
+    "k_3": {
+      "total_errors": 0,
+      "error_rate": 0.0,
+      "errors": []
+    },
+    "k_5": {
+      "total_errors": 1,
+      "error_rate": 0.05,
+      "errors": [
+        {
+          "index": 2,
+          "original_index": 92,
+          "message": "smile pleasure smile pain smile trouble pours like rain smile sum1 hurt smile becoz someone still love see smile",
+          "true_label": "ham",
+          "predicted_label": "spam",
+          "neighbors": [
+            {
+              "label": "ham",
+              "message": "catch bus fry egg make tea eat mom left dinner feel love",
+              "score": 0.853521466255188
+            },
+            {
+              "label": "spam",
+              "message": "mobile month entitle update late colour mobile camera free call mobile update free 08002986030",
+              "score": 0.8428069353103638
+            },
+            {
+              "label": "ham",
+              "message": "force eat slice really hungry tho suck mark get worried know sick turn pizza lol",
+              "score": 0.8403586149215698
+            },
+            {
+              "label": "spam",
+              "message": "freemsg hey darling week word back like fun still xxx std chgs send 150 rcv",
+              "score": 0.839150071144104
+            },
+            {
+              "label": "spam",
+              "message": "xxxmobilemovieclub use credit click wap link next txt message click httpwap xxxmobilemovieclubcomnqjkgighjjgcbl",
+              "score": 0.8375087976455688
+            }
+          ],
+          "label_distribution": {
+            "ham": 2,
+            "spam": 3
+          }
+        }
+      ]
+    }
+  }
+}

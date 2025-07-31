@@ -17,9 +17,6 @@ from nltk import pos_tag
 from sklearn import metrics
 from sklearn.model_selection import train_test_split
 from sklearn.naive_bayes import MultinomialNB
-from sklearn.svm import SVC
-from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier
 from xgboost import XGBClassifier
 from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, classification_report
 from sklearn.preprocessing import StandardScaler, LabelEncoder
@@ -70,18 +67,18 @@ def average_pool(last_hidden_states, attention_mask):
 
 
 # Manual preprocessing
-def preprocess_text(text):
-    '''
-    Preprocess the raw text for the next step of manual vectorization. 
-    Another option is retaining the raw text for the pretrained embedding 
-    models on Hugging Face.
-    '''
-    text = lowercase(text)
-    text = punctuation_removal(text)
-    tokens = tokenize(text)
-    tokens = remove_stopwords(tokens)
-    stem = stemming(tokens)
-    return stem
+# def preprocess_text(text):
+#     '''
+#     Preprocess the raw text for the next step of manual vectorization. 
+#     Another option is retaining the raw text for the pretrained embedding 
+#     models on Hugging Face.
+#     '''
+#     text = lowercase(text)
+#     text = punctuation_removal(text)
+#     tokens = tokenize(text)
+#     tokens = remove_stopwords(tokens)
+#     stem = stemming(tokens)
+#     return stem
 
 def lowercase(text):
     return text.lower()
@@ -147,25 +144,21 @@ def lemmatize_words(text):
     return " ".join(final_text)
 
 def preprocess_text(text):
+    '''
+    Preprocess the raw text for the next step of manual vectorization. 
+    Another option is retaining the raw text for the pretrained embedding 
+    models on Hugging Face.
+    '''
     text = text.lower()
     text = re.sub(r"[^\w\s]", '', text)
     lema = lemmatize_words(text)
     return lema
 
-    
-def create_model(name):
-    if name == 'Logistic Regression':
-        model = LogisticRegression()
-    elif name == 'Support Vector Machine':
-        model = SVC(kernel='linear', C=1, probability=True)
-    else:
-        model = RandomForestClassifier(n_estimators=400, random_state=11)
-
-    return model
-
 def create_vector(name):
     if name == 'TFIDF':
         return TfidfVectorizer(max_df=0.9, min_df=2)
+    elif name == 'LLM Embedding':
+        pass
     else:
         return CountVectorizer(max_df=0.9, min_df=2)
 
@@ -179,9 +172,14 @@ def create_train_test_data(X,Y,augment):
         xtrain, ytrain = ada.fit_resample(xtrain, ytrain)
     return xtrain, xtest, ytrain, ytest
 
-def train_model(model_name,features_vector,labels_vector):
-    model = create_model(model_name)
-    return model.fit(features_vector,labels_vector)
+def create_feature_label(path):
+    df = process_dataframe(path)[:100]
+    messages = df['Message'].values.tolist()
+    labels = df['Category'].values.tolist()
+    messages = [preprocess_text(message) for message in messages]
+    le = LabelEncoder()
+    y = le.fit_transform(labels)
+    return df ,messages, y, le, labels
 
 # def create_features(tokens, dictionary):
     

@@ -1,12 +1,12 @@
 {
-  "timestamp": "2025-07-30T18:34:10.398709",
+  "timestamp": "2025-07-31T19:34:18.112893",
   "model": "intfloat/multilingual-e5-base",
-  "val_size": 1115,
+  "val_size": 20,
   "accuracy_results": {
-    "1": 0.0017921146953405018
+    "3": 1.0
   },
   "errors_by_k": {
-    "k_1": {
+    "k_3": {
       "total_errors": 0,
       "error_rate": 0.0,
       "errors": []
