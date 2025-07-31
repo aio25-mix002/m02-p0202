@@ -5,6 +5,7 @@ description = "Smart spam dectector"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "plotly>=6.2.0",
 ]
 
 [dependency-groups]

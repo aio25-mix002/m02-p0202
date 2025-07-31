@@ -1,0 +1,14 @@
+deep-translator
+faiss-cpu
+imbalanced-learn
+matplotlib
+numpy
+pandas
+scikit-learn
+scipy
+seaborn
+streamlit
+torch
+transformers
+wordcloud
+xgboost

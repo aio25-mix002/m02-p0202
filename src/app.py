@@ -1,210 +1,164 @@
-import re
-import nltk
-import string 
-import warnings
-import numpy as np
-import pandas as pd
-import seaborn as sns
-import matplotlib.pyplot as plt
-from string import punctuation
-import time
-from datetime import datetime, timedelta
-from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
-from nltk.stem.porter import PorterStemmer
-from wordcloud import WordCloud,STOPWORDS
-from nltk.stem import WordNetLemmatizer
-from nltk.tokenize import word_tokenize
-from nltk import pos_tag
-from sklearn import metrics
-from sklearn.model_selection import train_test_split
-from sklearn.naive_bayes import MultinomialNB
-from sklearn.svm import SVC
-from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier
-from xgboost import XGBClassifier
-from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, classification_report
-from sklearn.preprocessing import StandardScaler, LabelEncoder
-from nltk.corpus import stopwords, wordnet
-from imblearn.over_sampling import SMOTE, ADASYN
-from deep_translator import GoogleTranslator
+# app.py
 import streamlit as st
-from models import spam_classifier_pipeline
-from utils import *
+import matplotlib.pyplot as plt
+import seaborn as sns
+from wordcloud import WordCloud
+from sklearn.metrics import accuracy_score, f1_score, confusion_matrix
 
-nltk.download('stopwords')
-nltk.download('averaged_perceptron_tagger_eng')
-nltk.download('wordnet')
-
-st.set_page_config(
-    page_title="Data Analysis & ML Models",
-    page_icon="📊",
-    layout="wide"
+from utils import (
+    load_and_prep_data,
+    preprocess_text,
+    create_vector,                # NEW NAME
+    create_train_test_data,       # NEW NAME
+    train_model,                  # NEW
+    plot_confusion_matrix_seaborn
 )
+from models import retrain_and_predict_single
+
+# Tùy chọn import thư viện dịch
+try:
+    from deep_translator import GoogleTranslator
+
+    TRANSLATOR_AVAILABLE = True
+except ImportError:
+    TRANSLATOR_AVAILABLE = False
 
 
+def main():
+    """Hàm chính điều khiển toàn bộ ứng dụng Streamlit."""
+    st.set_page_config(page_title="Spam Classifier", page_icon="📊", layout="wide")
+    st.title("Spam Messages Classifier")
 
-st.markdown("""
-    <style>
-        .stButton>button{
-            width:100%;
-            background-color:#ff4b4b;
-            color: white;
-            border: none;
-            padding: 0.5rem 1rem;
-            border-radius: 0.3rem;
-        }
-        .stTabs [data-baseweb="tab"] {
-            padding: 0.4rem 1rem;
-            border-top-left-radius: 10px;
-            border-top-right-radius: 10px;
-            background-color: #f0f2f6;
-        }
-        .stTabs [aria-selected="true"] {
-            background-color: #ff4b4b;
-            color: white;
-            font-weight: bold;
-        }
-        h1, h2, h3 { color: #ff4b4b; }
-    </style>
-""", unsafe_allow_html=True)
+    # --- Tải và xử lý dữ liệu một lần duy nhất ---
+    df, le = load_and_prep_data('data/spam.csv')
+    if df is None:
+        st.stop()
 
-@st.cache_data
-def create_feature_label(path):
-    df = process_dataframe(path)
-    messages = df['Message'].values.tolist()
-    labels = df['Category'].values.tolist()
-    messages = [preprocess_text(message) for message in messages]
-    le = LabelEncoder()
-    y = le.fit_transform(labels)
-    return df ,messages, y, le
+    @st.cache_data
+    def get_processed_messages(messages_series):
+        return [preprocess_text(msg) for msg in messages_series]
 
-df,messages,y, le = create_feature_label('../data/spam.csv')
+    messages = get_processed_messages(df['Message'])
+    y = df['label_encoded'].values
 
+    # --- Giao diện Tabs ---
+    tabs = st.tabs(["📋 Data Overview", "⚖️ Model Comparison", "💡 Live Prediction"])
 
-# UI 
-def main():    
-    tabs = st.tabs(["📋 Data Overview", "Compare Model", "Compare Augmentation", "Compare BAGs - TFIDF", "Predict"])
-    models = ['Logistic Regression', 'Support Vector Machine', 'Random Forest']
-    augments = ['No Augmentation','SMOTE','ADASYN']
-    vectors = ['Bag of Words','TFIDF']
+    # Định nghĩa các tùy chọn chung
+    model_options = ['Logistic Regression', 'Support Vector Machine', 'Random Forest', 'Naive Bayes', 'XGBoost']
+    aug_options = ['No Augmentation', 'SMOTE', 'ADASYN']
+    vector_options = ['TF-IDF', 'Bag of Words']
+
+    # --- TAB 1: DATA OVERVIEW ---
     with tabs[0]:
-        st.header("📋 Data Overview")
-        col1,col2,col3 = st.columns(3)
-        with col1:
-            st.metric("Total Records",len(df))
-        with col2:
-            st.metric("Ham",len(np.where(y == 0)[0]))
-        with col3:
-            st.metric("Spam",len(np.where(y == 1)[0]))
+        st.header("Data Overview")
+        col1, col2, col3 = st.columns(3)
+        col1.metric("Total Records", len(df))
+        col2.metric("HAM Messages", (df['Category'] == 'ham').sum())
+        col3.metric("SPAM Messages", (df['Category'] == 'spam').sum())
 
         st.dataframe(df.head(10))
-        st.markdown("### 📊 WordCloud")
-        col4,col5 = st.columns(2)
-        ham_words = ' '.join([messages[i] for i in np.where(y == 0)[0]])
-        spam_words = ' '.join([messages[i] for i in np.where(y == 1)[0]])
+
+        # --- THÊM MỚI: Biểu đồ phân tích độ dài tin nhắn ---
+        st.markdown("### Message Length Analysis")
+        # Tính toán độ dài tin nhắn
+        df['Message_Length'] = df['Message'].apply(len)
+
+        # Tạo biểu đồ histogram
+        fig_len, ax_len = plt.subplots(figsize=(10, 6))
+        sns.histplot(data=df, x='Message_Length', hue='Category', kde=True, bins=60, ax=ax_len,
+                     palette={'ham': 'skyblue', 'spam': 'salmon'})
+        ax_len.set_title('Distribution of Message Length by Category', fontsize=16)
+        ax_len.set_xlabel('Message Length')
+        ax_len.set_ylabel('Frequency')
+        st.pyplot(fig_len)
+        st.markdown("""
+        * Biểu đồ trên cho thấy phân phối độ dài của các tin nhắn.
+        * Tin nhắn **HAM** (thông thường) có xu hướng ngắn hơn.
+        * Tin nhắn **SPAM** thường có độ dài lớn hơn, có thể do chứa nhiều thông tin quảng cáo, mời chào.
+        """)
+        # --- KẾT THÚC PHẦN THÊM MỚI ---
+
+        st.markdown("### Word Clouds")
+        col4, col5 = st.columns(2)
+        ham_words = ' '.join(df[df['Category'] == 'ham']['Message'])
+        spam_words = ' '.join(df[df['Category'] == 'spam']['Message'])
+
         with col4:
-            st.subheader("Ham")
-            fig = plt.figure(figsize=(10, 6))
-            word_cloud_ham = WordCloud(width=800, height=500, random_state=21, max_font_size=110).generate(ham_words)
-            plt.imshow(word_cloud_ham, interpolation='bilinear')
-            st.pyplot(fig)
+            st.subheader("HAM Word Cloud")
+            wc_ham = WordCloud(width=800, height=400, background_color='white', colormap='viridis').generate(ham_words)
+            st.image(wc_ham.to_array(), use_container_width=True)
+
         with col5:
-            st.subheader("Spam")
-            fig = plt.figure(figsize=(10, 6))
-            word_cloud_spam = WordCloud(width=800, height=500, random_state=21, max_font_size=110).generate(spam_words)
-            plt.imshow(word_cloud_spam, interpolation='bilinear')
-            st.pyplot(fig)
+            st.subheader("SPAM Word Cloud")
+            wc_spam = WordCloud(width=800, height=400, background_color='black', colormap='plasma').generate(spam_words)
+            st.image(wc_spam.to_array(), use_container_width=True)
+
+    # --- TAB 2: MODEL COMPARISON ---
     with tabs[1]:
-        st.header("🎯 Compare Model")
-        aug_name = st.selectbox("Data Augmentation",augments,key="1")
-        vector_name = st.selectbox("Vectorize",vectors,key="2")
-        if st.button("🚀 Train Model",key=3):
-            cols_tab1 = st.columns(len(models))
-            for index, model_name in enumerate(models):
-                with cols_tab1[index]:
-                    vectorize = create_vector(vector_name)
-                    features = vectorize.fit_transform(messages)
-                    xtrain, xtest, ytrain, ytest= create_train_test_data(features,y,aug_name)
-                    model_train = train_model(model_name,xtrain,ytrain)
-                    pred = model_train.predict(xtest)
-                    accuracy = accuracy_score(ytest, pred)
-                    f1_scores = f1_score(ytest, pred)
-                    cm = confusion_matrix(ytest, pred)
-                    st.subheader(model_name)
-                    fig = plt.figure(figsize=(4,4))
-                    sns.heatmap(cm, linewidths=1, fmt='d', cmap='Greens', annot=True)
-                    plt.ylabel('Actual label')
-                    plt.xlabel('Predicted label')
-                    title = f'Accuracy Score: {accuracy:.3f}, F1 Score: {f1_scores:.3f}'
-                    plt.title(title)
-                    st.pyplot(fig)
+        st.header("Model Performance Comparison")
+        st.sidebar.header("Comparison Settings")
+
+        selected_aug = st.sidebar.selectbox("Data Augmentation", aug_options, key="comp_aug")
+        selected_vector = st.sidebar.selectbox("Vectorizer", vector_options, key="comp_vec")
+
+        if st.sidebar.button("🚀 Train & Compare Models", use_container_width=True):
+            vectorizer = create_vector(selected_vector)
+            X = vectorizer.fit_transform(messages)
+            X_train, X_test, y_train, y_test = create_train_test_data(X, y, selected_aug)
+
+            cols = st.columns(len(model_options))
+            for i, model_name in enumerate(model_options):
+                with cols[i]:
+                    with st.container(border=True):
+                        st.markdown(f"**{model_name}**")
+                        model = train_model(model_name, X_train, y_train)  # <-- dùng chuẩn main
+                        y_pred = model.predict(X_test)
+
+                        st.metric("Accuracy", f"{accuracy_score(y_test, y_pred):.3f}")
+                        st.metric("F1-Score", f"{f1_score(y_test, y_pred, average='weighted'):.3f}")
+
+                        cm = confusion_matrix(y_test, y_pred)
+                        st.pyplot(plot_confusion_matrix_seaborn(cm, le.classes_))
+
+    # --- TAB 3: LIVE PREDICTION ---
     with tabs[2]:
-        st.header("🎯 Compare Augmentation")
-        model_name = st.selectbox("Model Name",models,key="4")
-        vector_name = st.selectbox("Vectorize",vectors,key="5")
-        if st.button("🚀 Train Model",key=6):
-            cols_tab2 = st.columns(len(augments))
-            for index, aug_name in enumerate(augments):
-                with cols_tab2[index]:
-                    vectorize = create_vector(vector_name)
-                    features = vectorize.fit_transform(messages)
-                    xtrain, xtest, ytrain, ytest= create_train_test_data(features,y,aug_name)         
-                    model_train = train_model(model_name,xtrain,ytrain)
-                    pred = model_train.predict(xtest)
-                    accuracy = accuracy_score(ytest, pred)
-                    f1_scores = f1_score(ytest, pred)
-                    cm = confusion_matrix(ytest, pred)
-                    st.subheader(aug_name)
-                    fig = plt.figure(figsize=(4,4))
-                    sns.heatmap(cm, linewidths=1, fmt='d', cmap='Greens', annot=True)
-                    plt.ylabel('Actual label')
-                    plt.xlabel('Predicted label')
-                    title = f'Accuracy Score: {accuracy:.3f}, F1 Score: {f1_scores:.3f}'
-                    plt.title(title)
-                    st.pyplot(fig)
+        st.header("Predict New Message")
+        st.sidebar.header("Prediction Settings")
 
-    with tabs[3]:
-        st.header("🎯 Compare BAGs - TFIDF")
-        model_name = st.selectbox("Model Name",models,key="7")
-        aug_name = st.selectbox("Augmentation",augments,key="8")
-        if st.button("🚀 Train Model",key=9):
-            cols_tab3 = st.columns(len(vectors))
-            for index, vector_name in enumerate(vectors):
-                with cols_tab3[index]:
-                    vectorize = create_vector(vector_name)
-                    features = vectorize.fit_transform(messages)
-                    xtrain, xtest, ytrain, ytest= create_train_test_data(features,y,aug_name)
-                    model_train = train_model(model_name,xtrain,ytrain)
-                    pred = model_train.predict(xtest)
-                    accuracy = accuracy_score(ytest, pred)
-                    f1_scores = f1_score(ytest, pred)
-                    cm = confusion_matrix(ytest, pred)
-                    st.subheader(vector_name)
-                    fig = plt.figure(figsize=(4,4))
-                    sns.heatmap(cm, linewidths=1, fmt='d', cmap='Greens', annot=True)
-                    plt.ylabel('Actual label')
-                    plt.xlabel('Predicted label')
-                    title = f'Accuracy Score: {accuracy:.3f}, F1 Score: {f1_scores:.3f}'
-                    plt.title(title)
-                    st.pyplot(fig)
+        pred_model = st.sidebar.selectbox("Model", model_options, key="pred_model")
+        pred_vector = st.sidebar.selectbox("Vectorizer", vector_options, key="pred_vec")
+        pred_aug = st.sidebar.selectbox("Training Augmentation", aug_options, key="pred_aug")
 
-    with tabs[4]:
-        st.header("🎯 Predict")
-        message_input = st.text_input("Message", "")
-        translated = GoogleTranslator(source='auto', target='en').translate(message_input)
-        message_pred = [preprocess_text(translated)]
-        vector_name = st.selectbox("Vectorize",vectors,key="10")
-        aug_name = st.selectbox("Augmentation",augments,key="11")
-        model_name = st.selectbox("Model Name",models,key="12")
-        if st.button("🚀 Train Model",key=13):
-            st.markdown(f'<h3 style="color:blue;">Message: {translated}</h3>', unsafe_allow_html=True)
-            vectorize = create_vector(vector_name)
-            features = vectorize.fit_transform(messages)
-            xtrain, xtest, ytrain, ytest= create_train_test_data(features,y,aug_name)
-            model_train = train_model(model_name,xtrain,ytrain)
-            messages_vector = vectorize.transform(message_pred)
-            pred = model_train.predict(messages_vector)
-            st.markdown(f'<h3 style="color:green;">Class Predicted: {le.inverse_transform(pred)[0]}</h3>', unsafe_allow_html=True)
+        message_input = st.text_area("Enter a message to classify:", height=150,
+                                     placeholder="e.g., Congratulations! You've won...")
+
+        if TRANSLATOR_AVAILABLE:
+            translate_input = st.checkbox("Translate VI -> EN before predicting")
+
+        if st.button("Classify Message", type="primary", use_container_width=True):
+            if not message_input.strip():
+                st.warning("Please enter a message.")
+            else:
+                with st.spinner("Processing..."):
+                    final_input = message_input
+                    if TRANSLATOR_AVAILABLE and translate_input:
+                        final_input = GoogleTranslator(source='auto', target='en').translate(message_input)
+                        st.info(f"Translated to: '{final_input}'")
+
+                    processed_input = preprocess_text(final_input)
+                    vectorizer = create_vector(pred_vector)
+
+                    pred_id, conf = retrain_and_predict_single(
+                        pred_model, vectorizer, messages, y, pred_aug, processed_input
+                    )
+                    prediction = le.inverse_transform([pred_id])[0]
+
+                    if prediction == 'spam':
+                        st.error(f"### Predicted: SPAM (Confidence: {conf:.2%})", icon="🚫")
+                    else:
+                        st.success(f"### Predicted: HAM (Confidence: {conf:.2%})", icon="✔️")
+
 
 if __name__ == "__main__":
     main()
