@@ -173,7 +173,7 @@ def create_train_test_data(X,Y,augment):
     return xtrain, xtest, ytrain, ytest
 
 def create_feature_label(path):
-    df = process_dataframe(path)[:100]
+    df = process_dataframe(path)
     messages = df['Message'].values.tolist()
     labels = df['Category'].values.tolist()
     messages = [preprocess_text(message) for message in messages]
