@@ -70,16 +70,13 @@ def classify_with_knn(query_text,model,tokenizer,device,index,train_metadata,k=1
     final_prediction = unique_labels[np.argmax(counts)]
     return final_prediction, neighbor_info 
 
-def evaluate_knn_accuracy(test_embeddings, test_metadata, index, train_metadata, k_values=[1,3,5]):
+def evaluate_knn_accuracy(test_embeddings, index, train_metadata, k_values=[1,3,5]):
     predict_k = {}
     for k in k_values:
-        correct = 0
         total = len(test_embeddings)
         predict = []
         for i in range(total):
             query_embedding = test_embeddings[i:i+1].astype("float32")
-            true_label = test_metadata[i]["label"]
-            true_message = test_metadata[i]["message"]
             scores, indices = index.search(query_embedding,k)
             predictions = []
             neighbor_details = []
