@@ -100,5 +100,5 @@ def evaluate_knn_accuracy(test_embeddings, index, train_metadata, k_values=[1,3,
 
 def spam_classifier_pipeline(user_input,model,tokenizer,device,index,train_metadata, k = 3):
 
-    prediction,neighbors = classify_with_knn(user_input, model, tokenizer, device, index, train_metadata,k=k)
-    return [neighbor["label"] for neighbor in neighbors]
+    prediction, neighbors = classify_with_knn(user_input, model, tokenizer, device, index, train_metadata, k=k)
+    return {"prediction": prediction, "neighbors": [neighbor["label"] for neighbor in neighbors]}
