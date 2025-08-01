@@ -4,8 +4,7 @@ import matplotlib.pyplot as plt
 import torch
 from transformers import AutoModel, AutoTokenizer
 from wordcloud import WordCloud
-from sklearn.metrics import accuracy_score, f1_score, confusion_matrix
-from sklearn.preprocessing import LabelEncoder
+from sklearn.metrics import accuracy_score, f1_score
 
 import streamlit as st
 import utils as utils

@@ -1,7 +1,6 @@
 import string
 import numpy as np
 from sklearn.metrics import confusion_matrix
-from sklearn.naive_bayes import CategoricalNB, GaussianNB, MultinomialNB
 import torch
 import torch.nn.functional as F
 from nltk.tokenize import word_tokenize
@@ -10,9 +9,6 @@ from nltk.corpus import stopwords, wordnet
 from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
 from nltk import pos_tag
 from sklearn.model_selection import train_test_split
-from sklearn.svm import SVC
-from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier
 from imblearn.over_sampling import SMOTE, ADASYN
 import pandas as pd
 
@@ -22,7 +18,6 @@ from sklearn.preprocessing import LabelEncoder
 import matplotlib.pyplot as plt
 import seaborn as sns
 import nltk
-from xgboost import XGBClassifier
 
 # punkt is replaced by punkt_tab in NLTK 3.8.2
 # https://github.com/nltk/nltk/issues/3293
