@@ -206,7 +206,7 @@ def main():
                 with cols_tab3[index]:
                     # vectorize = utils.create_vector(vector_name)
                     # features = vectorize.fit_transform(messages)
-                    _, features = utils.vectorize_text(messages, vector_name)
+                    _, features = utils.vectorize_tokenized_text(messages, vector_name)
                     xtrain, xtest, ytrain, ytest = utils.create_train_test_data(
                         features, y, aug_name
                     )
