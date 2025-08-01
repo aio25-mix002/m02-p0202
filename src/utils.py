@@ -142,7 +142,7 @@ def create_dictionary(messages):
 
 def load_data(filepath, columns, drop_duplicates=True, dropna=True):
     """
-    Tải dữ liệu từ CSV, dọn dẹp và encode nhãn.
+    Load data from a CSV file, clean it, and encode labels.
     """
     try:
         # Đọc dữ liệu, chỉ lấy 2 cột đầu và đặt lại tên
