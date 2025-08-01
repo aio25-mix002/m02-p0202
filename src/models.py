@@ -1,10 +1,16 @@
 # If you would like to run this file (models.py), specifically use the model "intfloat/multilingual-e5-base", please run this code from terminal: "huggingface-cli login"
 
 import numpy as np
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.naive_bayes import CategoricalNB, GaussianNB, MultinomialNB
+from sklearn.svm import SVC
 import torch
 import torch.nn.functional as F
 import faiss
 from sklearn.model_selection import train_test_split
+from xgboost import XGBClassifier
+import config as config
 
 
 def average_pool(last_hidden_states, attention_mask):
@@ -32,19 +38,19 @@ def get_embeddings(texts, model, tokenizer, device, batch_size=32):
     return np.vstack(embeddings)
 
 
-def create_train_test_metadata(messages, y, X_embeddings, metadata, test_size, seed):
+def create_train_test_metadata(messages, y, x_embeddings, metadata, test_size, seed):
     train_indices, test_indices = train_test_split(
         range(len(messages)), test_size=test_size, stratify=y, random_state=seed
     )
-    X_train_emb = X_embeddings[train_indices]
-    X_test_emb = X_embeddings[test_indices]
+    x_train_emb = x_embeddings[train_indices]
+    x_test_emb = x_embeddings[test_indices]
     # y_train = y[train_indices]
     y_test = y[test_indices]
     train_metadata = [metadata[i] for i in train_indices]
     test_metadata = [metadata[i] for i in test_indices]
-    index = faiss.IndexFlatIP(X_train_emb.shape[1])
-    index.add(X_train_emb.astype("float32"))
-    return index, train_metadata, test_metadata, X_test_emb, y_test
+    index = faiss.IndexFlatIP(x_train_emb.shape[1])
+    index.add(x_train_emb.astype("float32"))
+    return index, train_metadata, test_metadata, x_test_emb, y_test
 
 
 def classify_with_knn(query_text, model, tokenizer, device, index, train_metadata, k=1):
@@ -127,3 +133,56 @@ def spam_classifier_pipeline(
         "prediction": prediction,
         "neighbors": [neighbor["label"] for neighbor in neighbors],
     }
+
+
+def train_model(model_name, features_vector, labels_vector):
+    model = _create_model(model_name)
+    return model.fit(features_vector, labels_vector)
+
+
+def _create_model(name):
+    """Tạo một instance của mô hình ML cổ điển dựa trên tên."""
+    random_state = config.AppConfig.SEED
+    models = {
+        StatisticalModelOptions.LOGISTIC_REGRESSION: LogisticRegression(
+            class_weight="balanced", max_iter=1000, random_state=random_state
+        ),
+        StatisticalModelOptions.SUPPORT_VECTOR_MACHINE: SVC(
+            kernel="linear",
+            probability=True,
+            class_weight="balanced",
+            random_state=random_state,
+        ),
+        StatisticalModelOptions.GAUSSIAN_NAIVE_BAYES: GaussianNB(),
+        StatisticalModelOptions.CATEGORICAL_NAIVE_BAYES: CategoricalNB(),
+        StatisticalModelOptions.MULTINOMIAL_NAIVE_BAYES: MultinomialNB(),
+        StatisticalModelOptions.RANDOM_FOREST: RandomForestClassifier(
+            n_estimators=100, random_state=random_state, class_weight="balanced"
+        ),
+        StatisticalModelOptions.XGBOOST: XGBClassifier(
+            use_label_encoder=False, eval_metric="logloss", random_state=random_state
+        ),
+    }
+    return models.get(name)
+
+
+class StatisticalModelOptions:
+    LOGISTIC_REGRESSION = "Logistic Regression"
+    SUPPORT_VECTOR_MACHINE = "Support Vector Machine"
+    GAUSSIAN_NAIVE_BAYES = "Gaussian Naive Bayes"
+    CATEGORICAL_NAIVE_BAYES = "Categorical Naive Bayes"
+    MULTINOMIAL_NAIVE_BAYES = "Multinomial Naive Bayes"
+    RANDOM_FOREST = "Random Forest"
+    XGBOOST = "XGBoost"
+
+    @staticmethod
+    def get_all_models():
+        return [
+            StatisticalModelOptions.LOGISTIC_REGRESSION,
+            StatisticalModelOptions.SUPPORT_VECTOR_MACHINE,
+            # StatisticalModelOptions.GAUSSIAN_NAIVE_BAYES,
+            # StatisticalModelOptions.CATEGORICAL_NAIVE_BAYES,
+            StatisticalModelOptions.MULTINOMIAL_NAIVE_BAYES,
+            StatisticalModelOptions.RANDOM_FOREST,
+            StatisticalModelOptions.XGBOOST,
+        ]
