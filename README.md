@@ -7,38 +7,59 @@
     - [Step 2: Activate the virtual environment](#step-2-activate-the-virtual-environment)
     - [Step 3: Install dependencies](#step-3-install-dependencies)
   - [Development Guidelines](#development-guidelines)
+    - [Using UV](#using-uv)
     - [Code Linting](#code-linting)
     - [CI/CD](#cicd)
 
 
 ## Prerequisites
-- Python: python 3.11 
+- Python: python 3.11
 - Package Management: uv
 
 ## Development Setup
 
 ### Step 1: Create the virtual environment
-```
+```bash
 uv venv
 ```
 
 ### Step 2: Activate the virtual environment
 
-Windows: 
-```
+Windows:
+```bash
 .venv\Scripts\activate
 ```
 
 ### Step 3: Install dependencies
-```
+```bash
 uv sync
 ```
 
 ## Development Guidelines
+### Using UV
+**Install UV**
+Ref: https://docs.astral.sh/uv/getting-started/installation/
+
+**Restore package**
+```bash
+uv sync
+```
+
+**Install new package**
+```bash
+uv add package-name
+```
 
 ### Code Linting
-```
+
+**Code check only**
+```bash
 uvx ruff check
+```
+
+**Code check and autofix**
+```bash
+uvx ruff check --fix
 ```
 
 ### CI/CD

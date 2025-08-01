@@ -5,12 +5,46 @@ description = "Smart spam dectector"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "deep-translator>=1.11.4",
+    "faiss-cpu>=1.11.0.post1",
+    "imbalanced-learn>=0.13.0",
+    "matplotlib>=3.10.3",
+    "mlflow>=3.1.4",
+    "nltk>=3.9.1",
+    "numpy>=2.3.2",
+    "pandas>=2.3.1",
+    "scikit-learn>=1.6.1",
+    "seaborn>=0.13.2",
+    "streamlit>=1.47.1",
+    "torch==2.6.0",
+    "torchaudio==2.6.0",
+    "torchvision==0.21.0",
+    "tqdm>=4.67.1",
+    "transformers>=4.54.1",
+    "wordcloud>=1.9.4",
+    "xgboost>=3.0.3",
 ]
 
 [dependency-groups]
 dev = [
     "ruff>=0.12.4",
 ]
+
+[tool.uv.sources]
+torch = [
+  { index = "pytorch-cu124", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+]
+torchaudio = [
+  { index = "pytorch-cu124", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+]
+torchvision = [
+  { index = "pytorch-cu124", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cu124"
+url = "https://download.pytorch.org/whl/cu124"
+explicit = true
 
 [tool.ruff]
 line-length = 100
