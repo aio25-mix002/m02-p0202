@@ -1,40 +1,38 @@
-import re
 import string
 import numpy as np
 import torch
 import torch.nn.functional as F
-import nltk
 from nltk.tokenize import word_tokenize
 from nltk.stem import PorterStemmer,WordNetLemmatizer
 from nltk.corpus import stopwords,wordnet
-from datetime import datetime, timedelta
 from sklearn.feature_extraction.text import CountVectorizer, TfidfVectorizer
-from nltk.stem.porter import PorterStemmer
-from wordcloud import WordCloud,STOPWORDS
-from nltk.stem import WordNetLemmatizer
-from nltk.tokenize import word_tokenize
 from nltk import pos_tag
-from sklearn import metrics
 from sklearn.model_selection import train_test_split
-from sklearn.naive_bayes import MultinomialNB
 from sklearn.svm import SVC
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
-from xgboost import XGBClassifier
-from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, classification_report
-from sklearn.preprocessing import StandardScaler, LabelEncoder
-from nltk.corpus import stopwords, wordnet
 from imblearn.over_sampling import SMOTE, ADASYN
 import pandas as pd
 
 from tqdm import tqdm
 from transformers import AutoTokenizer, AutoModel
 
+import nltk
+# punkt is replaced by punkt_tab in NLTK 3.8.2
+# https://github.com/nltk/nltk/issues/3293
+nltk.download('punkt_tab')
+nltk.download("stopwords")
+nltk.download("averaged_perceptron_tagger_eng")
+nltk.download("wordnet")
+
+class Vectorizer:
+    TFIDF = "TFIDF"
+    BAG_OF_WORDS = "Bag of Words"
 
 # Embedding raw text by a pretrained model
 def get_embedding_model(model_name):
     '''
-    Load a pretrained model from Hugging Face so that it can tokenize and 
+    Load a pretrained model from Hugging Face so that it can tokenize and
     vectorize raw text automatically.
     '''
     tokenizer = AutoTokenizer.from_pretrained(model_name)
@@ -72,14 +70,23 @@ def average_pool(last_hidden_states, attention_mask):
 # Manual preprocessing
 def preprocess_text(text):
     '''
-    Preprocess the raw text for the next step of manual vectorization. 
-    Another option is retaining the raw text for the pretrained embedding 
+    Preprocess the raw text for the next step of manual vectorization.
+    Another option is retaining the raw text for the pretrained embedding
     models on Hugging Face.
     '''
+    # Text Normalizing
     text = lowercase(text)
+
+    # Cleaning
     text = punctuation_removal(text)
+
+    # Tokenization
     tokens = tokenize(text)
+
+    # Removing noise & Dimensionality reduction.
     tokens = remove_stopwords(tokens)
+
+    # Semantic Normalization
     stem = stemming(tokens)
     return stem
 
@@ -110,7 +117,7 @@ def create_dictionary(messages):
     for tokens in messages:
         if tokens not in dictionary:
             dictionary.append(tokens)
-            
+
     features = np.zeros(len(dictionary))
     for token in tokens:
         if token in dictionary:
@@ -134,7 +141,7 @@ def get_simple_pos(tag):
         return wordnet.ADV
     else:
         return wordnet.NOUN
-    
+
 def lemmatize_words(text):
     lemmatizer = WordNetLemmatizer()
     stop_words = stopwords.words('english')
@@ -146,13 +153,13 @@ def lemmatize_words(text):
             final_text.append(lema)
     return " ".join(final_text)
 
-def preprocess_text(text):
-    text = text.lower()
-    text = re.sub(r"[^\w\s]", '', text)
-    lema = lemmatize_words(text)
-    return lema
+# def preprocess_text(text):
+#     text = text.lower()
+#     text = re.sub(r"[^\w\s]", '', text)
+#     lema = lemmatize_words(text)
+#     return lema
 
-    
+
 def create_model(name):
     if name == 'Logistic Regression':
         model = LogisticRegression()
@@ -169,6 +176,26 @@ def create_vector(name):
     else:
         return CountVectorizer(max_df=0.9, min_df=2)
 
+def vectorize_tokenized_text(corpus, vector_name):
+    '''
+    Vectorizing the preprocessed text.
+    '''
+    if vector_name == Vectorizer.TFIDF:
+        vectorizer = TfidfVectorizer(max_df=0.9, min_df=2)
+
+    elif vector_name == Vectorizer.BAG_OF_WORDS:
+        vectorizer = CountVectorizer(max_df=0.9, min_df=2)
+    else:
+        raise ValueError(f"Unknown vectorization method: {vector_name}")
+    # if corpus is a list of lists, convert it to a list of strings
+    if isinstance(corpus[0], list):
+        messages = [' '.join(msg) if isinstance(msg, list) else str(msg) for msg in corpus]
+    else:
+        messages = [str(msg) for msg in corpus]
+    # Fit and transform the messages
+    vectorized_messages = vectorizer.fit_transform(messages)
+    return vectorizer, vectorized_messages
+
 def create_train_test_data(X,Y,augment):
     xtrain, xtest, ytrain, ytest = train_test_split(X,Y,random_state=42, test_size = 0.3, stratify = Y)
     if augment == 'SMOTE':
@@ -184,5 +211,5 @@ def train_model(model_name,features_vector,labels_vector):
     return model.fit(features_vector,labels_vector)
 
 # def create_features(tokens, dictionary):
-    
+
 # X = np.array([create_features(tokens,dictionary) for tokens in messages])

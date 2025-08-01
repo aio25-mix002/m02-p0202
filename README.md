@@ -2,21 +2,24 @@
 
 - [M02-P0202 Project](#m02-p0202-project)
   - [Prerequisites](#prerequisites)
-  - [Development Setup](#development-setup)
+  - [Setup](#setup)
     - [Step 1: Create the virtual environment](#step-1-create-the-virtual-environment)
     - [Step 2: Activate the virtual environment](#step-2-activate-the-virtual-environment)
     - [Step 3: Install dependencies](#step-3-install-dependencies)
-  - [Development Guidelines](#development-guidelines)
+  - [Run application](#run-application)
+    - [Via CLI](#via-cli)
+    - [Via Visual Studio Code Launch Profile](#via-visual-studio-code-launch-profile)
+  - [Appendix](#appendix)
     - [Using UV](#using-uv)
     - [Code Linting](#code-linting)
     - [CI/CD](#cicd)
 
 
 ## Prerequisites
-- Python: python 3.11
-- Package Management: uv
+- Python: python 3.12
+- Package Management: uv (https://docs.astral.sh/uv/getting-started/installation/)
 
-## Development Setup
+## Setup
 
 ### Step 1: Create the virtual environment
 ```bash
@@ -35,7 +38,17 @@ Windows:
 uv sync
 ```
 
-## Development Guidelines
+## Run application
+
+### Via CLI
+```bash
+streamlit run ./src/app.py
+```
+### Via Visual Studio Code Launch Profile
+Profiles:
+- **Using Windows**: Debug Streamlit App (Windows - venv)
+
+## Appendix
 ### Using UV
 **Install UV**
 Ref: https://docs.astral.sh/uv/getting-started/installation/
@@ -49,6 +62,8 @@ uv sync
 ```bash
 uv add package-name
 ```
+
+
 
 ### Code Linting
 
