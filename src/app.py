@@ -61,7 +61,7 @@ def create_embedding_metadata(messages, labels, model, tokenizer, device, y):
 
 # UI
 def main():
-    """Hàm chính điều khiển toàn bộ ứng dụng Streamlit."""
+    """Main function that controls the entire Streamlit application."""
     st.set_page_config(page_title="Spam Classifier", page_icon="📊", layout="wide")
     st.title("Spam Messages Classifier")
 
