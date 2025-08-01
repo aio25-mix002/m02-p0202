@@ -231,7 +231,7 @@ def main():
         st.header("🎯 FAISS")
         index,train_metadata,test_metadata,X_test_emb,y_test = create_train_test_metadata(messages_faiss, y, X_embeddings,metadata,test_size= 0.1,seed = 42)
         k_values=[1,3,5]
-        predict_results = evaluate_knn_accuracy(X_test_emb,test_metadata,index, train_metadata, k_values)
+        predict_results = evaluate_knn_accuracy(X_test_emb, index, train_metadata, k_values)
         cols_tab5 = st.columns(len(k_values))
         for index, k in enumerate(k_values):
             with cols_tab5[index]:
