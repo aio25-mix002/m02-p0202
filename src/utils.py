@@ -253,8 +253,8 @@ def create_train_test_data(X, Y, augment):
 
 def plot_confusion_matrix(y_true, y_pred, labels):
     """
-    Vẽ confusion matrix bằng Seaborn và Matplotlib.
-    Hàm này trả về đối tượng figure để app.py có thể hiển thị bằng st.pyplot().
+    Plot a confusion matrix using Seaborn and Matplotlib.
+    This function returns a figure object so that app.py can display it using st.pyplot().
     """
     cm = confusion_matrix(y_true, y_pred)
     fig, ax = plt.subplots(figsize=(4, 3.5))  # Tăng chiều cao một chút cho đẹp hơn
