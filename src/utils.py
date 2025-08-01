@@ -161,7 +161,7 @@ def load_data(filepath, columns, drop_duplicates=True, dropna=True):
 
 def encode_labels(df, label_column="Category"):
     """
-    Mã hóa nhãn trong DataFrame.
+    Encode labels in the DataFrame.
     """
     encoder = LabelEncoder()
     result = encoder.fit_transform(df[label_column])
