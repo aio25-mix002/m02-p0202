@@ -205,3 +205,6 @@ mlruns/
 
 # macOS
 .DS_Store
+
+# Jetbrains IDE
+.idea
