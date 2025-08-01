@@ -141,7 +141,7 @@ def train_model(model_name, features_vector, labels_vector):
 
 
 def _create_model(name):
-    """Tạo một instance của mô hình ML cổ điển dựa trên tên."""
+    """Create an instance of a classical ML model based on the given name."""
     random_state = config.AppConfig.SEED
     models = {
         StatisticalModelOptions.LOGISTIC_REGRESSION: LogisticRegression(
