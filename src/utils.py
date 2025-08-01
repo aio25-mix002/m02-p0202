@@ -18,7 +18,7 @@ from tqdm import tqdm
 from transformers import AutoTokenizer, AutoModel
 
 import nltk
-# punkt is replaced by punkt_tab in NLTK 3.8.1
+# punkt is replaced by punkt_tab in NLTK 3.8.2
 # https://github.com/nltk/nltk/issues/3293
 nltk.download('punkt_tab')
 nltk.download("stopwords")
