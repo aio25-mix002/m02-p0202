@@ -9,6 +9,7 @@
   - [Run application](#run-application)
     - [Via CLI](#via-cli)
     - [Via Visual Studio Code Launch Profile](#via-visual-studio-code-launch-profile)
+    - [Via Google Colab](#via-google-colab)
   - [Appendix](#appendix)
     - [Using UV](#using-uv)
     - [Code Linting](#code-linting)
@@ -47,6 +48,11 @@ streamlit run ./src/app.py
 ### Via Visual Studio Code Launch Profile
 Profiles:
 - **Using Windows**: Debug Streamlit App (Windows - venv)
+
+### Via Google Colab
+We can run this app via Google Colab Jupyter Notebook, checkout [runbook.ipynb](./notebooks/runbook.ipynb) to get the notebook file.
+
+Or click this link for the direct-link to Google Colab: [Open in Google Colab](https://colab.research.google.com/github/aio25-mix002/m02-p0202/blob/main/notebooks/runbook.ipynb)
 
 ## Appendix
 ### Using UV
