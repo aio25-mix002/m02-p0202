@@ -11,6 +11,8 @@ from nltk import pos_tag
 from sklearn.model_selection import train_test_split
 from imblearn.over_sampling import SMOTE, ADASYN
 import pandas as pd
+from scipy.sparse import hstack
+import numpy as np
 
 from tqdm import tqdm
 from transformers import AutoTokenizer, AutoModel
@@ -18,7 +20,10 @@ from sklearn.preprocessing import LabelEncoder
 import matplotlib.pyplot as plt
 import seaborn as sns
 import nltk
-
+from deep_translator import GoogleTranslator
+from collections import Counter
+import random
+import pandas as pd # Đảm bảo đã import pandas
 # punkt is replaced by punkt_tab in NLTK 3.8.2
 # https://github.com/nltk/nltk/issues/3293
 nltk.download("punkt_tab")
@@ -265,3 +270,114 @@ def plot_confusion_matrix(y_true, y_pred, labels):
     ax.set_ylabel('True Label', fontsize=12)
     plt.tight_layout()
     return fig
+
+
+def _back_translate(sentence, source_lang='en', pivot_lang='vi'):
+    """
+    Hàm trợ giúp, thực hiện dịch xuôi-ngược cho một câu.
+    Trả về câu gốc nếu có lỗi hoặc nếu câu dịch ngược giống hệt câu gốc.
+    """
+    try:
+        # Dịch xuôi: Anh -> Việt
+        forward_translator = GoogleTranslator(source=source_lang, target=pivot_lang)
+        translated = forward_translator.translate(sentence)
+        if not translated:
+            return sentence
+
+        # Dịch ngược: Việt -> Anh
+        backward_translator = GoogleTranslator(source=pivot_lang, target=source_lang)
+        back_translated = backward_translator.translate(translated)
+
+        # Chỉ trả về câu mới nếu nó thực sự khác câu gốc
+        if back_translated and back_translated.lower() != sentence.lower():
+            return back_translated
+        else:
+            return sentence  # Trả về câu gốc nếu không có gì thay đổi
+    except Exception as e:
+        # In ra cảnh báo và trả về câu gốc nếu có lỗi xảy ra
+        print(f"Warning: Back-translation failed for a sentence. Returning original. Error: {e}")
+        return sentence
+
+
+def augment_text_data(messages, labels, method='back_translation'):
+    """
+    Tăng cường dữ liệu cho lớp thiểu số (minority class) để cân bằng dataset.
+
+    Args:
+        messages (list): Danh sách các tin nhắn văn bản thô.
+        labels (list): Danh sách các nhãn tương ứng (dạng text, vd: 'ham', 'spam').
+        method (str): Tên phương pháp augmentation.
+
+    Returns:
+        tuple: (augmented_messages, augmented_labels) - Dữ liệu đã được cân bằng.
+    """
+    print(f"--- Starting Text Augmentation with: {method} ---")
+
+    label_counts = Counter(labels)
+    # Tìm lớp đa số và thiểu số
+    major_class_label, major_count = label_counts.most_common(1)[0]
+    minor_class_label, minor_count = label_counts.most_common()[-1]
+
+    # Nếu dữ liệu đã cân bằng thì không cần làm gì
+    if major_count == minor_count:
+        print("Classes are already balanced. No text augmentation needed.")
+        return messages, labels
+
+    # Lấy ra các tin nhắn thuộc lớp thiểu số
+    minority_messages = [msg for msg, lbl in zip(messages, labels) if lbl == minor_class_label]
+
+    num_to_generate = major_count - minor_count
+    augmented_texts = []
+
+    print(f"Minority class '{minor_class_label}' has {minor_count} samples.")
+    print(f"Will generate {num_to_generate} new samples to match majority class count of {major_count}.")
+
+    # Bắt đầu tạo dữ liệu mới
+    while len(augmented_texts) < num_to_generate:
+        # Chọn ngẫu nhiên một tin nhắn từ lớp thiểu số để biến đổi
+        original_message = random.choice(minority_messages)
+
+        new_message = ""
+        if method == 'back_translation':
+            new_message = _back_translate(original_message)
+        # BẠN CÓ THỂ THÊM CÁC KỸ THUẬT KHÁC Ở ĐÂY
+        # elif method == 'synonym_replacement':
+        #     new_message = ... (code cho kỹ thuật khác)
+
+        # Chỉ thêm vào nếu câu mới được tạo ra khác với câu gốc
+        if new_message and new_message != original_message:
+            augmented_texts.append(new_message)
+            # In tiến độ để dễ theo dõi
+            if (len(augmented_texts) % 50 == 0):
+                print(f"   Generated {len(augmented_texts)}/{num_to_generate} samples...")
+
+    print(f"Successfully generated {len(augmented_texts)} new unique samples.")
+
+    # Kết hợp dữ liệu gốc và dữ liệu mới được tạo ra
+    new_messages = messages + augmented_texts
+    new_labels = labels + [minor_class_label] * len(augmented_texts)
+
+    return new_messages, new_labels
+
+def combine_features_with_length(text_features_sparse, df_with_messages):
+    """
+    Kết hợp các đặc trưng văn bản (sparse matrix) với đặc trưng độ dài tin nhắn (dense).
+
+    Args:
+        text_features_sparse: Ma trận thưa từ TfidfVectorizer hoặc CountVectorizer.
+        df_with_messages: DataFrame gốc chứa cột 'Message'.
+
+    Returns:
+        Ma trận thưa mới đã được kết hợp.
+    """
+    # Tính toán độ dài của mỗi tin nhắn
+    message_lengths = df_with_messages['Message'].apply(len).values
+
+    # Reshape thành một vector cột để có thể stack
+    message_lengths_reshaped = message_lengths.reshape(-1, 1)
+
+    # Xếp chồng theo chiều ngang: kết hợp ma trận thưa với vector độ dài
+    # .tocsr() để đảm bảo định dạng tương thích và hiệu quả cho các mô hình scikit-learn
+    combined_features = hstack([text_features_sparse, message_lengths_reshaped]).tocsr()
+
+    return combined_features
