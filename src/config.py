@@ -12,6 +12,7 @@ class AppConfig:
         APP_HOME = Path(os.getenv("APP_HOME", Path(__file__).parent.parent))
         RAW_DATA_DIR = APP_HOME / "data"
         RAW_DATA_FILE = RAW_DATA_DIR / "spam.csv"
+        AUGMENTED_DATA_FILE=RAW_DATA_DIR / "spam_augmented.csv"
 
 
 def seed_everything(seed: int = AppConfig.SEED):

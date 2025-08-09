@@ -10,7 +10,7 @@ import streamlit as st
 import utils as utils
 import models as models
 from config import AppConfig, seed_everything
-
+import pandas as pd
 # If translator is available, use it for translation
 try:
     from deep_translator import GoogleTranslator
@@ -152,13 +152,25 @@ def main():
     with tabs[1]:
         st.header("🎯 Compare Model")
 
-        # Settings section for model comparison
+        # --- Data Settings ---
         st.markdown("### Data Settings")
-        selected_aug = st.selectbox("Data Augmentation", aug_options, key="comp_aug")
+
+        # 1. Giữ lại đầy đủ các tùy chọn
+        aug_options = [
+            "No Augmentation",
+            "Augmented Data (Back Translation)",
+            "SMOTE",
+            "ADASYN"
+        ]
+        selected_aug = st.selectbox(
+            "Data Augmentation / Source", aug_options, key="comp_aug_final"
+        )
+
         selected_vector = st.selectbox(
             "Label Vectorizer", vector_options, key="comp_vec"
         )
 
+        # --- Model Settings (giữ nguyên) ---
         st.markdown("### Model Settings")
         st.markdown("""
         <style>
@@ -170,38 +182,73 @@ def main():
             }
         </style>
         """, unsafe_allow_html=True)
-        # List all model options in checkbox for each options, default to all
         selected_models = st.multiselect(
             "### Select Models", model_options, default=model_options
         )
-        if not selected_models:
-            st.warning("Please select at least one model to compare.")
-            return
 
+        # --- Nút Train & Compare ---
         if st.button("🚀 Train & Compare Models", use_container_width=True):
-            _, x = utils.vectorize_tokenized_text(messages, selected_vector)
-            x_train, x_test, y_train, y_test = utils.create_train_test_data(
-                x, y, selected_aug
-            )
-            cols = st.columns(len(selected_models))
-            for i, model_name in enumerate(selected_models):
-                with cols[i]:
-                    with st.container(border=True):
-                        st.markdown(f"**{model_name}**")
-                        model = models.train_model(model_name, x_train, y_train)
-                        y_pred = model.predict(x_test)
+            if not selected_models:
+                st.warning("Please select at least one model to compare.")
+            else:
+                with st.spinner(f"Processing with: '{selected_aug}'..."):
 
-                        st.metric("Accuracy", f"{accuracy_score(y_test, y_pred):.3f}")
-                        st.metric(
-                            "F1-Score",
-                            f"{f1_score(y_test, y_pred, average='weighted'):.3f}",
-                        )
+                    # 2. Tải dữ liệu cơ sở dựa trên lựa chọn
+                    # Nếu chọn dữ liệu đã tăng cường sẵn, tải file augmented.
+                    # Ngược lại, luôn bắt đầu từ file gốc cho các trường hợp còn lại.
+                    if selected_aug == "Augmented Data (Back Translation)":
+                        data_path = AppConfig.Path.AUGMENTED_DATA_FILE
+                        st.info("Loading pre-augmented (Back Translation) dataset.")
+                    else:
+                        data_path = AppConfig.Path.RAW_DATA_FILE
+                        if selected_aug != "No Augmentation":
+                            st.info(f"Loading original dataset to apply {selected_aug}...")
+                        else:
+                            st.info("Loading original dataset.")
 
-                        st.pyplot(
-                            utils.plot_confusion_matrix(y_test, y_pred, le.classes_),
-                            use_container_width=False,
-                        )
+                    # Tải và xử lý văn bản (luôn cần thiết)
+                    df = utils.load_data(data_path, columns=["Category", "Message"])
+                    messages_raw = df["Message"].astype(str).values.tolist()
+                    messages_processed = [utils.preprocess_text(m) for m in messages_raw]
+                    encoder, y = utils.encode_labels(df, label_column="Category")
 
+                    # Vector hóa văn bản
+                    vectorizer, x = utils.vectorize_tokenized_text(messages_processed, selected_vector)
+
+                    # 3. Quyết định phương pháp augmentation cho bước chia train/test
+                    augment_method_for_split = selected_aug
+                    # Nếu đã tải file augmented, không cần augment thêm nữa
+                    if selected_aug == "Augmented Data (Back Translation)":
+                        augment_method_for_split = "No Augmentation"
+
+                    # Chia dữ liệu train/test và áp dụng SMOTE/ADASYN nếu cần
+                    x_train, x_test, y_train, y_test = utils.create_train_test_data(
+                        x, y, augment=augment_method_for_split
+                    )
+
+                    # Sửa lại dòng 229
+                    st.success(f"Data ready. Training {x_train.shape[0]} samples, testing {x_test.shape[0]} samples.")
+
+                # --- PHẦN HUẤN LUYỆN VÀ ĐÁNH GIÁ MÔ HÌNH (hoàn toàn không đổi) ---
+                with st.spinner("Training and evaluating models..."):
+                    cols = st.columns(len(selected_models))
+                    for i, model_name in enumerate(selected_models):
+                        with cols[i]:
+                            with st.container(border=True):
+                                st.markdown(f"**{model_name}**")
+                                model = models.train_model(model_name, x_train, y_train)
+                                y_pred = model.predict(x_test)
+
+                                st.metric("Accuracy", f"{accuracy_score(y_test, y_pred):.3f}")
+                                st.metric(
+                                    "F1-Score",
+                                    f"{f1_score(y_test, y_pred, average='weighted'):.3f}",
+                                )
+
+                                st.pyplot(
+                                    utils.plot_confusion_matrix(y_test, y_pred, encoder.classes_),
+                                    use_container_width=False,
+                                )
     # --- TAB: FAISS ---
     with tabs[2]:
         st.header("🎯 FAISS")
