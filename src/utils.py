@@ -214,9 +214,9 @@ def lemmatize_words(text):
 
 def create_vector(name):
     if name == "TFIDF":
-        return TfidfVectorizer(max_df=0.9, min_df=2)
+        return TfidfVectorizer(max_df=0.9, min_df=2,ngram_range=(1, 2))
     else:
-        return CountVectorizer(max_df=0.9, min_df=2)
+        return CountVectorizer(max_df=0.9, min_df=2,ngram_range=(1, 2))
 
 
 def vectorize_tokenized_text(corpus, vector_name):
@@ -224,10 +224,10 @@ def vectorize_tokenized_text(corpus, vector_name):
     Vectorizing the preprocessed text.
     """
     if vector_name == VectorizerOptions.TFIDF:
-        vectorizer = TfidfVectorizer(max_df=0.9, min_df=2)
+        vectorizer = TfidfVectorizer(max_df=0.9, min_df=2,ngram_range=(1, 2))
 
     elif vector_name == VectorizerOptions.BAG_OF_WORDS:
-        vectorizer = CountVectorizer(max_df=0.9, min_df=2)
+        vectorizer = CountVectorizer(max_df=0.9, min_df=2,ngram_range=(1, 2))
     else:
         raise ValueError(f"Unknown vectorization method: {vector_name}")
     # if corpus is a list of lists, convert it to a list of strings
@@ -244,7 +244,7 @@ def vectorize_tokenized_text(corpus, vector_name):
 
 def create_train_test_data(X, Y, augment):
     xtrain, xtest, ytrain, ytest = train_test_split(
-        X, Y, random_state=42, test_size=0.3, stratify=Y
+        X, Y, random_state=42, test_size=0.1, stratify=Y
     )
     if augment == "SMOTE":
         sm = SMOTE(random_state=42)
