@@ -105,8 +105,8 @@ streamlit run ./src/app.py
 ├── .vscode/
 │   └── launch.json                   # VS Code debug configuration
 ├── data/
-│   ├── spam.csv                      # Original dataset (5,574 lines including header)
-│   └── spam_augmented.csv            # Augmented dataset (9,626 lines including header)
+│   ├── spam.csv                      # Original dataset (1 header + 5,574 data rows)
+│   └── spam_augmented.csv            # Augmented dataset (1 header + 9,625 data rows)
 ├── notebooks/
 │   ├── faiss.ipynb                   # FAISS experimentation
 │   ├── runbook.ipynb                 # Google Colab runbook
@@ -210,8 +210,8 @@ Job: `lint` (runs on ubuntu-latest)
 - If you modify torch versions, maintain the custom index configuration
 
 ### Data Files
-- **spam.csv:** Original dataset (5,574 lines including header, 5,573 data rows), columns: Category, Message
-- **spam_augmented.csv:** Back-translation augmented (9,626 lines including header, 9,625 data rows)
+- **spam.csv:** Original dataset (1 header + 5,574 data rows), columns: Category, Message
+- **spam_augmented.csv:** Back-translation augmented dataset (1 header + 9,625 data rows)
 - Data loading handles: drop_duplicates, dropna, encoding issues
 - Label encoding: "ham" -> 0, "spam" -> 1
 
